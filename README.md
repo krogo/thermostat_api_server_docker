@@ -29,6 +29,11 @@ services:
             # Used in reply to thermostat
             - API_SERVER_ADDRESS=10.0.1.22 # This should be the IP where a wifi client can access this container port 8080, NOT an internal docker IP
             - LOG_LEVEL=DEBUG # DEBUG INFO
+            # Optional: raw mode string your thermostat uses for emergency heat (default eheat)
+            #- EMERGENCY_HEAT_MODE=eheat
+        volumes:
+            # Learned device settings (backlight, volume, humidity setpoints...) persist here
+            - ./thermostat_data:/data
         restart: always
 ```
 ### Home Assistant Configuration
@@ -36,3 +41,8 @@ services:
 Uses [MQTT Discovery](https://www.home-assistant.io/docs/mqtt/discovery/) to add climate device and associated sensors. If MQTT discovery is enabled, no configuration should be necessary aside from setting container environment variables.  
 
 ![Home Assistant Entities](entities.png)
+
+### Emergency heat and device settings (krogo fork)
+
+- Emergency heat appears in Home Assistant as the **Emergency Heat** preset on the climate entity (HVAC mode shows *heat*). Selecting the preset sends the `EMERGENCY_HEAT_MODE` mode string to the thermostat; clearing it returns to normal heat. To confirm the right string for your firmware, put the thermostat in emergency heat at the wall and look at the *Operating Mode* sensor.
+- Backlight, volume, sound type, time format, DST, screen lockout and humidify/dehumidify setpoints are no longer forced to fixed values on every config push. They are learned from the configuration the thermostat reports, saved to `SETTINGS_FILE`, and sent back unchanged. Each one (except the lockout code) is exposed as a configuration entity on the device so it can be changed from Home Assistant. Until the thermostat reports its config, the previous hardcoded values are used.

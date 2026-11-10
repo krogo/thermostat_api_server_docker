@@ -46,6 +46,62 @@ thermostat_command_topic = f"homeassistant/climate/{thermostat_name}/cmnd"
 thermostat_state_topic = f"homeassistant/climate/{thermostat_name}/state"
 thermostat_serial = os.environ['THERMOSTAT_SERIAL']
 
+# Raw mode string the thermostat uses for emergency heat. Confirm yours by putting the
+# thermostat in emergency heat and checking the "<name> Operating Mode" sensor in HA.
+eheat_mode = os.environ.get('EMERGENCY_HEAT_MODE', 'eheat')
+heat_modes = ("heat", eheat_mode)
+active_modes = ("cool", "heat", eheat_mode)
+EHEAT_PRESET = "Emergency Heat"
+
+# Device settings that used to be hardcoded in every config push. They are now learned
+# from what the thermostat reports, persisted to disk, and sent back unchanged unless
+# changed from Home Assistant. Defaults are the old hardcoded values and are only used
+# until the thermostat has reported its own.
+SETTING_DEFAULTS = {
+    "blight": "10",
+    "timeFormat": "12",
+    "dst": "on",
+    "volume": "high",
+    "soundType": "click",
+    "scrLockout": "off",
+    "scrLockoutCode": "0000",
+    "humSetpoint": "45",
+    "dehumSetpoint": "45",
+}
+settings_file = os.environ.get('SETTINGS_FILE', '/data/thermostat_settings.json')
+
+def load_settings():
+    try:
+        with open(settings_file) as f:
+            saved = json.load(f)
+        return {k: str(v) for k, v in saved.items() if k in SETTING_DEFAULTS}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logging.warning(f"Could not read {settings_file}: {e}")
+        return {}
+
+def save_settings():
+    try:
+        tmp = settings_file + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(device_settings, f, indent=2)
+        os.replace(tmp, settings_file)
+    except Exception as e:
+        logging.warning(f"Could not save settings to {settings_file} (they will not survive a restart): {e}")
+
+device_settings = load_settings()   # last values known to be on the thermostat
+pending_settings = {}               # changes requested from HA, not yet sent
+
+def effective_settings():
+    return {**SETTING_DEFAULTS, **device_settings, **pending_settings}
+
+current_configuration.update(effective_settings())
+if device_settings:
+    logging.info(f"Loaded saved thermostat settings: {device_settings}")
+else:
+    logging.info("No saved thermostat settings yet; using defaults until the thermostat reports its own")
+
 device = {"mdl": "TSTAT0201CW", "sw": "Unknown", "mf": "Observer", "ids": thermostat_serial, "name": thermostat_name}
 
 climate_configuration_payload = {
@@ -62,17 +118,77 @@ climate_configuration_payload = {
     "min_temp": 55,
     "mode_cmd_t": thermostat_command_topic + "/operating_mode",
     "mode_stat_t": thermostat_state_topic,
-    "mode_stat_tpl": "{{ value_json.mode }}",
+    # Emergency heat is reported to HA as hvac mode "heat" plus the "Emergency Heat" preset
+    "mode_stat_tpl": "{% if value_json.mode == '" + eheat_mode + "' %}heat{% else %}{{ value_json.mode }}{% endif %}",
     "modes": ["off", "cool", "heat"],
+    "preset_modes": [EHEAT_PRESET],
+    "preset_mode_command_topic": thermostat_command_topic + "/preset_mode",
+    "preset_mode_state_topic": thermostat_state_topic,
+    "preset_mode_value_template": "{% if value_json.mode == '" + eheat_mode + "' %}" + EHEAT_PRESET + "{% else %}none{% endif %}",
     "name": thermostat_name,
     "power_command_topic": thermostat_command_topic + "/power",
     "temp_cmd_t": thermostat_command_topic + "/temperature",
     "temp_stat_t": thermostat_state_topic,
-    "temp_stat_tpl": "{% if value_json.mode == 'cool' %}{{ value_json.clsp }}{% elif value_json.mode == 'heat' %}{{ value_json.htsp }}{% endif %}",
+    "temp_stat_tpl": "{% if value_json.mode == 'cool' %}{{ value_json.clsp }}{% elif value_json.mode in ['heat', '" + eheat_mode + "'] %}{{ value_json.htsp }}{% endif %}",
     "temp_step":"1",
     "temperature_unit": "F",
     "uniq_id": thermostat_serial
 }
+
+# HA controls for the device settings. Option lists and ranges are best guesses; a value
+# the thermostat reports that isn't in a select's list gets added automatically.
+SETTING_ENTITIES = {
+    "blight":        {"platform": "number", "name": "Backlight", "ic": "mdi:brightness-6", "min": 0, "max": 10},
+    "volume":        {"platform": "select", "name": "Volume", "ic": "mdi:volume-high", "options": ["high", "medium", "low", "off"]},
+    "soundType":     {"platform": "select", "name": "Sound Type", "ic": "mdi:music-note", "options": ["click", "beep"]},
+    "timeFormat":    {"platform": "select", "name": "Time Format", "ic": "mdi:clock-outline", "options": ["12", "24"]},
+    "dst":           {"platform": "switch", "name": "Daylight Saving Time", "ic": "mdi:clock-time-four"},
+    "scrLockout":    {"platform": "switch", "name": "Screen Lockout", "ic": "mdi:lock"},
+    "humSetpoint":   {"platform": "number", "name": "Humidify Setpoint", "ic": "mdi:water-plus", "min": 0, "max": 100, "unit_of_meas": "%"},
+    "dehumSetpoint": {"platform": "number", "name": "Dehumidify Setpoint", "ic": "mdi:water-minus", "min": 0, "max": 100, "unit_of_meas": "%"},
+}
+NUMERIC_SETTINGS = ("blight", "humSetpoint", "dehumSetpoint")
+
+def publish_setting_entity(client, key):
+    spec = SETTING_ENTITIES[key]
+    payload = {
+        "device": device,
+        "name": f"{thermostat_name} {spec['name']}",
+        "ic": spec["ic"],
+        "uniq_id": f"{thermostat_serial}-setting-{key}",
+        "entity_category": "config",
+        "stat_t": thermostat_state_topic,
+        "val_tpl": "{{ value_json." + key + " }}",
+        "cmd_t": f"{thermostat_command_topic}/setting/{key}",
+    }
+    if spec["platform"] == "number":
+        payload.update({"min": spec["min"], "max": spec["max"], "step": 1, "mode": "box"})
+        if "unit_of_meas" in spec:
+            payload["unit_of_meas"] = spec["unit_of_meas"]
+    elif spec["platform"] == "select":
+        payload["options"] = spec["options"]
+    elif spec["platform"] == "switch":
+        payload.update({"pl_on": "on", "pl_off": "off", "stat_on": "on", "stat_off": "off"})
+    client.publish(f'homeassistant/{spec["platform"]}/{thermostat_serial}-setting-{key}/config', json.dumps(payload), retain=True)
+
+def learn_settings(reported):
+    """Record settings the thermostat reported. Returns True if anything changed."""
+    changed = False
+    for key, value in reported.items():
+        if key in pending_settings:
+            continue  # an HA change is queued for this key; don't let a stale report undo it
+        if device_settings.get(key) != value:
+            logging.info(f"Thermostat reported {key} = {value} (was {device_settings.get(key, 'unknown')})")
+            device_settings[key] = value
+            changed = True
+            spec = SETTING_ENTITIES.get(key)
+            if spec and spec["platform"] == "select" and value not in spec["options"]:
+                spec["options"].append(value)
+                publish_setting_entity(client, key)
+    if changed:
+        save_settings()
+        current_configuration.update(effective_settings())
+    return changed
 
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
@@ -129,6 +245,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
         "uniq_id": f"{thermostat_serial}-humidity"
     }
     client.publish(f'homeassistant/sensor/{thermostat_serial}-humidity/config', json.dumps(humidity_sensor_configuration_payload), retain=True)
+
+    for key in SETTING_ENTITIES:
+        publish_setting_entity(client, key)
 
     mode_sensor_configuration_payload = {
         "device": device,
@@ -264,8 +383,39 @@ def on_message(client, userdata, message):
         new_operating_mode = message.payload
         changes_pending = True
         candidate_configuration["mode"] = new_operating_mode
-        if new_operating_mode in ("cool", "heat"):
+        if new_operating_mode in active_modes:
             last_active_mode = new_operating_mode
+
+    elif message.topic == f"{thermostat_command_topic}/preset_mode":
+        if message.payload == EHEAT_PRESET:
+            changes_pending = True
+            candidate_configuration["mode"] = eheat_mode
+            last_active_mode = eheat_mode
+            logging.info("Emergency heat ON")
+        elif message.payload == "none":
+            mode_now = candidate_configuration.get("mode", current_configuration.get("mode"))
+            if mode_now == eheat_mode:
+                changes_pending = True
+                candidate_configuration["mode"] = "heat"
+                last_active_mode = "heat"
+                logging.info("Emergency heat OFF -- back to normal heat")
+
+    elif message.topic.startswith(f"{thermostat_command_topic}/setting/"):
+        key = message.topic.rsplit("/", 1)[-1]
+        if key not in SETTING_ENTITIES:
+            logging.warning(f"Ignoring unknown setting {key}")
+            return
+        value = message.payload.strip()
+        if key in NUMERIC_SETTINGS:
+            try:
+                value = str(int(float(value)))
+            except ValueError:
+                logging.warning(f"Ignoring non-numeric value for {key}: {value}")
+                return
+        changes_pending = True
+        pending_settings[key] = value
+        current_configuration.update(effective_settings())
+        logging.info(f"Queued setting change {key} = {value}")
 
     elif message.topic == f"{thermostat_command_topic}/power":
         # Separate power on/off command (pow_cmd_t) so Home Assistant's turn_on
@@ -309,7 +459,7 @@ def on_message(client, userdata, message):
                     candidate_configuration["htsp"] = str(max_allowed_htsp)
                     logging.info(f"Clamped heating setpoint (htsp) down to {max_allowed_htsp}°F to maintain 2°F deadband gap")
 
-        elif active_mode == "heat":
+        elif active_mode in heat_modes:
             if candidate_configuration.get("htsp") != new_temperature:
                 changes_pending = True
                 candidate_configuration["htsp"] = new_temperature
@@ -377,14 +527,21 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
             global current_configuration
             changes_pending = False
             current_configuration["changes_pending"] = "OFF"
-            logging.info(f'''New configuration: {candidate_configuration}''')
-            html = f'''<config version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/config"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><atom:link rel="http://{api_server_address}/rels/dealer_config" href="http://{api_server_address}/systems/{thermostat_serial}/dealer_config"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><mode>{candidate_configuration["mode"]}</mode><fan>{candidate_configuration["fan"]}</fan><blight>10</blight><timeFormat>12</timeFormat><dst>on</dst><volume>high</volume><soundType>click</soundType><scrLockout>off</scrLockout><scrLockoutCode>0000</scrLockoutCode><humSetpoint>45</humSetpoint><dehumSetpoint>45</dehumSetpoint><utilityEvent/><zones><zone id="1"><name>Zone 1</name><hold>{candidate_configuration["hold"]}</hold><otmr/><htsp>{candidate_configuration["htsp"]}</htsp><clsp>{candidate_configuration["clsp"]}</clsp><program></program></zone></zones></config>'''
+            settings = effective_settings()
+            logging.info(f'''New configuration: {candidate_configuration} settings: {settings}''')
+            html = f'''<config version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/config"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><atom:link rel="http://{api_server_address}/rels/dealer_config" href="http://{api_server_address}/systems/{thermostat_serial}/dealer_config"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><mode>{candidate_configuration["mode"]}</mode><fan>{candidate_configuration["fan"]}</fan><blight>{settings["blight"]}</blight><timeFormat>{settings["timeFormat"]}</timeFormat><dst>{settings["dst"]}</dst><volume>{settings["volume"]}</volume><soundType>{settings["soundType"]}</soundType><scrLockout>{settings["scrLockout"]}</scrLockout><scrLockoutCode>{settings["scrLockoutCode"]}</scrLockoutCode><humSetpoint>{settings["humSetpoint"]}</humSetpoint><dehumSetpoint>{settings["dehumSetpoint"]}</dehumSetpoint><utilityEvent/><zones><zone id="1"><name>Zone 1</name><hold>{candidate_configuration["hold"]}</hold><otmr/><htsp>{candidate_configuration["htsp"]}</htsp><clsp>{candidate_configuration["clsp"]}</clsp><program></program></zone></zones></config>'''
             self.send_response(200)
             self.send_header("Content-Length", len(html))
             self.send_header("Connection", "keep-alive")
             self.send_header("Content-Type", "application/xml; charset=utf-8")
             self.end_headers()
             self.wfile.write(bytes(html, "utf8"))
+            # The thermostat now has whatever we just sent; treat queued HA changes as applied
+            if pending_settings:
+                device_settings.update(pending_settings)
+                pending_settings.clear()
+                save_settings()
+            current_configuration.update(effective_settings())
             client.publish(thermostat_state_topic, str(current_configuration).replace("'", '"').replace("None", '""'), retain=True)
 
         else:
@@ -402,7 +559,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
         html = ""
         match = False
         monitored = ["rt","rh","mode","fan","coolicon","heaticon","fanicon","hold","filtrlvl","clsp","htsp","opstat","iducfm","oat","oducoiltmp"]
-        paths = ["/status", "/odu_status","/equipment_events", "/profile"] # we only need data from these paths
+        paths = ["/status", "/odu_status","/equipment_events", "/profile", "/config"] # we only need data from these paths
         received_message = {}
         final_locator = f'/{self.path.split("/")[-1:][0]}' # eg /status
         logging.debug(f"{final_locator} -- {data}")
@@ -412,6 +569,21 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                 # Parse and create dict of received message
                 root = ET.fromstring(data)
                 children = list(root)
+                if final_locator == "/config":
+                    # Thermostat reporting its own config. Only read the top-level device
+                    # settings here; zones/programs repeat tags like htsp/clsp, so don't
+                    # flatten this into current_configuration.
+                    reported = {}
+                    for key in SETTING_DEFAULTS:
+                        el = root.find(key)
+                        if el is not None and el.text is not None:
+                            reported[key] = el.text.strip()
+                    mode_el = root.find("mode")
+                    logging.debug(f"Thermostat config report: mode={mode_el.text if mode_el is not None else None} settings={reported}")
+                    if learn_settings(reported):
+                        client.publish(thermostat_state_topic, str(current_configuration).replace("'",'"').replace("None",'""'), retain=True)
+                    self.send_empty_200()
+                    return
                 if "/equipment_events" in final_locator:
                     for child in root.iter():
                         # Only get latest equipment event
@@ -434,7 +606,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                 if option in received_message:
                     current_configuration[option] = received_message[option]
 
-            if current_configuration.get("mode") in ("cool", "heat"):
+            if current_configuration.get("mode") in active_modes:
                 last_active_mode = current_configuration["mode"]
 
             # We don't need any kind of response for this path
@@ -472,7 +644,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                     candidate_configuration.setdefault('clsp', current_configuration['clsp'])
                     candidate_configuration.setdefault('htsp', current_configuration['htsp'])
                     candidate_configuration.setdefault('mode', current_configuration['mode'])
-                    if current_configuration['mode'] in ("cool", "heat"):
+                    if current_configuration['mode'] in active_modes:
                         last_active_mode = current_configuration['mode']
 
                     # Update climate device with client IP

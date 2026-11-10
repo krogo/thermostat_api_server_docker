@@ -19,6 +19,8 @@ ENV MQTT_PORT 1883
 ENV THERMOSTAT_SERIAL XXXXXXXXXX
 ENV THERMOSTAT_NAME Thermostat
 ENV LOG_LEVEL DEBUG
+ENV EMERGENCY_HEAT_MODE eheat
+ENV SETTINGS_FILE /data/thermostat_settings.json
 
 COPY ./thermostat_api_server.py /usr/bin/thermostat_api_server.py
 
@@ -27,7 +29,10 @@ RUN apk add --no-cache --update curl && \
   pip cache purge && \ 
   pip uninstall -y wheel setuptools pip && \ 
   adduser -D thermostat_api && \
+  mkdir -p /data && chown thermostat_api /data && \
   apk --purge del apk-tools
+
+VOLUME /data
 
 USER thermostat_api
 
