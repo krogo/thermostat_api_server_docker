@@ -18,4 +18,6 @@ ENV THERMOSTAT_NAME="House Main" \
     API_SERVER_ADDRESS="HA_LAN_IP" \
     LOG_LEVEL="INFO" \
     EMERGENCY_HEAT_MODE="eheat" \
-    SETTINGS_FILE="/data/thermostat_settings.json"
+    SETTINGS_FILE="/data/thermostat_settings.json" \
+    STATUS_PING_RATE="0" \
+    ODU_STATUS_PING_RATE="0"

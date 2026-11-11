@@ -4,6 +4,11 @@ This fork tracks [aneisch/thermostat_api_server_docker](https://github.com/aneis
 
 Base: upstream commit `b882915` ("Misc bug fixes, including unexpected flip to heat"), the latest upstream as of 2026-11-10.
 
+## 1.0.5 — 2026-11-10
+
+### Added
+- `STATUS_PING_RATE` and `ODU_STATUS_PING_RATE` set the check-in intervals (`pingRate`, `oduStatusPingRate`) sent in every status reply. Both default to `0`, upstream's value, which makes the thermostat post back-to-back about every 2 s. The wall unit's keypad has been sluggish, possibly from that load. Higher values reduce traffic but delay how quickly HA changes are picked up.
+
 ## 1.0.4 — 2026-11-10
 
 ### Fixed
