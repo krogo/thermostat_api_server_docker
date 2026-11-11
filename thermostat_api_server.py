@@ -482,7 +482,10 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         # Malformed requests fail before command/path are set; don't crash the logger
-        logging.info(f"{self.address_string()} -- {getattr(self, 'command', None)} -- {getattr(self, 'path', None)} {format % args if args else ''}".rstrip())
+        if hasattr(self, 'path'):
+            logging.info(f"{self.address_string()} -- {self.command} -- {self.path}")
+        else:
+            logging.info(f"{self.address_string()} -- malformed request -- {format % args}")
 
     def send_no_changes(self):
         html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>0</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>0</oduStatusPingRate><configHasChanges>off</configHasChanges><dealerConfigHasChanges>off</dealerHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
