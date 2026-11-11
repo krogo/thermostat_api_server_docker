@@ -10,7 +10,7 @@ Base: upstream commit `b882915` ("Misc bug fixes, including unexpected flip to h
 - **Slow pickup of HA changes.** This firmware sometimes sends empty or unparseable `/status` posts. Upstream answered those with "no changes" even when a change was queued, so the change waited for the next full status post. That added 17–30 s in testing. Every status reply now announces queued changes.
 
 ### Observed
-- The 1.0.4 XML fix changed the thermostat's polling with no other change. With the well-formed reply and `pingRate`/`oduStatusPingRate` still `0`, it posts status about every 10 s and odu_status/equipment_events about once a minute: about 8 requests/min, down from about 33. With the malformed reply it was polling back-to-back every ~1.8 s, apparently because it couldn't parse the intervals. So `0` seems to mean "use the default". The `*_PING_RATE` options are probably unnecessary now.
+- The 1.0.4 XML fix changed the thermostat's polling with no other change. With the well-formed reply and `pingRate`/`oduStatusPingRate` still `0`, it posts status about every 10 s and odu_status/equipment_events about once a minute: about 8 requests/min, down from about 33. With the malformed reply it was polling back-to-back every ~1.8 s, apparently because it couldn't parse the intervals. So `0` seems to mean "use the default". The `*_PING_RATE` options are probably unnecessary now. Confirmed in use: the wall unit's keypad is far more responsive at the slower polling rate, so the back-to-back polling had been bogging down the thermostat's processor (with upstream too).
 
 ## 1.0.5 — 2026-11-10
 
