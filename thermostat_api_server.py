@@ -13,6 +13,8 @@ import socketserver
 import time
 import json
 import logging
+import signal
+import sys
 
 logging.basicConfig(
     level=os.environ['LOG_LEVEL'], format="%(asctime)s -- %(levelname)s -- %(message)s",
@@ -703,6 +705,19 @@ client.on_message = on_message
 logging.info("Connecting to MQTT")
 client.connect(mqtt_address, mqtt_port)
 
+def handle_stop(signum, frame):
+    # Docker/Supervisor stop sends SIGTERM; as PID 1 we must handle it ourselves or get SIGKILLed (exit 137)
+    logging.info("Stop requested, shutting down")
+    raise SystemExit(0)
+
+signal.signal(signal.SIGTERM, handle_stop)
+
 client.loop_start()
 client.subscribe(thermostat_command_topic)
-server.serve_forever()
+try:
+    server.serve_forever()
+finally:
+    server.server_close()
+    client.loop_stop()
+    client.disconnect()
+    logging.info("Stopped")

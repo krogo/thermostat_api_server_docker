@@ -36,4 +36,4 @@ VOLUME /data
 
 USER thermostat_api
 
-ENTRYPOINT python -u /usr/bin/thermostat_api_server.py
+ENTRYPOINT ["python", "-u", "/usr/bin/thermostat_api_server.py"]
