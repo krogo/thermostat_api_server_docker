@@ -138,7 +138,7 @@ climate_configuration_payload = {
 # HA controls for the device settings. Option lists and ranges are best guesses; a value
 # the thermostat reports that isn't in a select's list gets added automatically.
 SETTING_ENTITIES = {
-    "blight":        {"platform": "number", "name": "Backlight", "ic": "mdi:brightness-6", "min": 0, "max": 10},
+    "blight":        {"platform": "number", "name": "Backlight", "ic": "mdi:brightness-6", "min": 0, "max": 100},
     "volume":        {"platform": "select", "name": "Volume", "ic": "mdi:volume-high", "options": ["high", "medium", "low", "off"]},
     "soundType":     {"platform": "select", "name": "Sound Type", "ic": "mdi:music-note", "options": ["click", "beep"]},
     "timeFormat":    {"platform": "select", "name": "Time Format", "ic": "mdi:clock-outline", "options": ["12", "24"]},
@@ -560,7 +560,9 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
         html = ""
         match = False
         monitored = ["rt","rh","mode","fan","coolicon","heaticon","fanicon","hold","filtrlvl","clsp","htsp","opstat","iducfm","oat","oducoiltmp"]
-        paths = ["/status", "/odu_status","/equipment_events", "/profile", "/config"] # we only need data from these paths
+        # The thermostat reports its own config (on local changes) to /systems/<serial>
+        config_paths = ["/config", f"/{thermostat_serial}"]
+        paths = ["/status", "/odu_status","/equipment_events", "/profile"] + config_paths # we only need data from these paths
         received_message = {}
         final_locator = f'/{self.path.split("/")[-1:][0]}' # eg /status
         logging.debug(f"{final_locator} -- {data}")
@@ -570,16 +572,20 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                 # Parse and create dict of received message
                 root = ET.fromstring(data)
                 children = list(root)
-                if final_locator == "/config":
-                    # Thermostat reporting its own config. Only read the top-level device
-                    # settings here; zones/programs repeat tags like htsp/clsp, so don't
-                    # flatten this into current_configuration.
+                if final_locator in config_paths:
+                    # Thermostat reporting its own config, as <system><config>...</config></system>.
+                    # Only read the top-level device settings; zones/programs repeat tags like
+                    # htsp/clsp, so don't flatten this into current_configuration.
+                    cfg = root if root.tag == "config" else root.find("config")
+                    if cfg is None:
+                        self.send_empty_200()
+                        return
                     reported = {}
                     for key in SETTING_DEFAULTS:
-                        el = root.find(key)
+                        el = cfg.find(key)
                         if el is not None and el.text is not None:
                             reported[key] = el.text.strip()
-                    mode_el = root.find("mode")
+                    mode_el = cfg.find("mode")
                     logging.debug(f"Thermostat config report: mode={mode_el.text if mode_el is not None else None} settings={reported}")
                     if learn_settings(reported):
                         client.publish(thermostat_state_topic, str(current_configuration).replace("'",'"').replace("None",'""'), retain=True)
