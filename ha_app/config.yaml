@@ -1,5 +1,5 @@
 name: Thermostat API Server
-version: "1.0.5"
+version: "1.0.6"
 slug: thermostat_api_server
 description: Observer TSTAT0201CW to MQTT bridge
 arch:

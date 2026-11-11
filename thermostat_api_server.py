@@ -511,7 +511,22 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
         else:
             logging.info(f"{self.address_string()} -- malformed request -- {format % args}")
 
+    def send_change_notice(self):
+        logging.info("Responding with change notice...")
+        html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>{status_ping_rate}</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>{odu_status_ping_rate}</oduStatusPingRate><configHasChanges>on</configHasChanges><dealerConfigHasChanges>off</dealerConfigHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(html)))
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Content-Type", "application/xml; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(bytes(html, "utf8"))
+
     def send_no_changes(self):
+        # Any status reply must announce queued HA changes -- including replies to the empty or
+        # unparseable status posts this firmware sometimes sends -- or the change waits for the
+        # next full status post.
+        if changes_pending:
+            return self.send_change_notice()
         html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>{status_ping_rate}</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>{odu_status_ping_rate}</oduStatusPingRate><configHasChanges>off</configHasChanges><dealerConfigHasChanges>off</dealerConfigHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
         self.send_response(200)
         self.send_header("Content-Length", str(len(html)))
@@ -706,14 +721,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                     self.send_no_changes()
 
                 elif changes_pending == True:
-                    logging.info("Responding with change notice...")
-                    html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>{status_ping_rate}</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>{odu_status_ping_rate}</oduStatusPingRate><configHasChanges>on</configHasChanges><dealerConfigHasChanges>off</dealerConfigHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
-                    self.send_response(200)
-                    self.send_header("Content-Length", str(len(html)))
-                    self.send_header("Connection", "keep-alive")
-                    self.send_header("Content-Type", "application/xml; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(bytes(html, "utf8"))
+                    self.send_change_notice()
 
                 else:
                     self.send_no_changes()
