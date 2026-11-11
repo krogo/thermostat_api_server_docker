@@ -1,0 +1,11 @@
+name: Thermostat API Server
+version: "1.0.2"
+slug: thermostat_api_server
+description: Observer TSTAT0201CW to MQTT bridge
+arch:
+  - amd64
+init: false
+startup: services
+boot: auto
+ports:
+  8080/tcp: 8080

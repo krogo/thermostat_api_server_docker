@@ -44,5 +44,8 @@ Uses [MQTT Discovery](https://www.home-assistant.io/docs/mqtt/discovery/) to add
 
 ### Emergency heat and device settings (krogo fork)
 
+See [CHANGELOG.md](CHANGELOG.md) for what this fork changes, and [ha_app/](ha_app/) for running it as a Home Assistant OS local app ([notes](ha_app/NOTES.md)).
+
+
 - Emergency heat appears in Home Assistant as the **Emergency Heat** preset on the climate entity (HVAC mode shows *heat*). Selecting the preset sends the `EMERGENCY_HEAT_MODE` mode string to the thermostat; clearing it returns to normal heat. To confirm the right string for your firmware, put the thermostat in emergency heat at the wall and look at the *Operating Mode* sensor.
 - Backlight, volume, sound type, time format, DST, screen lockout and humidify/dehumidify setpoints are no longer forced to fixed values on every config push. They are learned from the configuration the thermostat reports, saved to `SETTINGS_FILE`, and sent back unchanged. Each one (except the lockout code) is exposed as a configuration entity on the device so it can be changed from Home Assistant. Until the thermostat reports its config, the previous hardcoded values are used.
