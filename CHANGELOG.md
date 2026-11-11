@@ -4,6 +4,12 @@ This fork tracks [aneisch/thermostat_api_server_docker](https://github.com/aneis
 
 Base: upstream commit `b882915` ("Misc bug fixes, including unexpected flip to heat"), the latest upstream as of 2026-11-10.
 
+## 1.0.3 — 2026-11-10
+
+### Added
+- `<name> Outdoor Unit` sensor, showing the outdoor unit's operating status (`opstat`) as reported in `/odu_status`. The card uses it to show whether the heat pump is running.
+- **Observer Thermostat Card** (`ha_card/`, card version 1.0.0). It's a custom Lovelace card with Off / Heat / E-Heat / Cool buttons, so Emergency Heat appears as a mode instead of a separate Preset box. It also has a debounced setpoint, fan buttons, equipment status, humidity, outdoor temperature, filter hours and a "sending to thermostat" indicator.
+
 ## 1.0.2 — 2026-11-10 (commit `81a8c35`)
 
 ### Fixed

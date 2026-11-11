@@ -349,6 +349,16 @@ def on_connect(client, userdata, flags, reason_code, properties):
     }
     client.publish(f'homeassistant/sensor/{thermostat_serial}-oat/config', json.dumps(oat_sensor_configuration_payload), retain=True)
 
+    opstat_sensor_configuration_payload = {
+        "device": device,
+        "stat_t": thermostat_state_topic,
+        "name": f"{thermostat_name} Outdoor Unit",
+        "ic": "mdi:heat-pump",
+        "val_tpl": "{{ value_json.opstat }}",
+        "uniq_id": f"{thermostat_serial}-opstat"
+    }
+    client.publish(f'homeassistant/sensor/{thermostat_serial}-opstat/config', json.dumps(opstat_sensor_configuration_payload), retain=True)
+
     iducfm_sensor_configuration_payload = {
         "device": device,
         "stat_t": thermostat_state_topic,
