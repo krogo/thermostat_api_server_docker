@@ -17,7 +17,8 @@
  * pending_entity: binary_sensor.house_main_changes_pending
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
+const PENDING_TIMEOUT_MS = 45000;
 
 const MODE_DEFS = {
   off:   { label: "Off",    icon: "mdi:power",            cls: "off" },
@@ -123,6 +124,8 @@ class ObserverThermostatCard extends HTMLElement {
         .row button.active.heat { background: var(--heat); } .row button.active.cool { background: var(--cool); }
         .row button.active.eheat { background: var(--eheat); } .row button.active.auto { background: var(--auto); }
         .row button.active.off, .row button.active.fan { background: var(--primary-color); }
+        .row button.pending { border: 2px dashed var(--primary-color); animation: pulse 1.2s ease-in-out infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
         .info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider-color); }
         .info div { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
         .info .v { font-size: 1.1em; } .info .k { font-size: 0.75em; color: var(--secondary-text-color); }
@@ -194,12 +197,14 @@ class ObserverThermostatCard extends HTMLElement {
   }
 
   _setMode(mode, st) {
+    this._pendingMode = { key: mode, at: Date.now() };
+    this._update();
     if (mode === "eheat") return this._call("set_preset_mode", { preset_mode: this._config.eheat_preset });
     if (mode === "heat" && this._currentMode(st) === "eheat") return this._call("set_preset_mode", { preset_mode: "none" });
     return this._call("set_hvac_mode", { hvac_mode: mode });
   }
 
-  _renderButtons(container, items, activeKey, onClick, keyName) {
+  _renderButtons(container, items, activeKey, onClick, keyName, pendingKey) {
     const sig = items.map((i) => i.key).join(",");
     if (this[keyName] !== sig) {
       container.innerHTML = "";
@@ -214,7 +219,10 @@ class ObserverThermostatCard extends HTMLElement {
       }
       this[keyName] = sig;
     }
-    for (const b of container.children) b.classList.toggle("active", b.dataset.key === activeKey);
+    for (const b of container.children) {
+      b.classList.toggle("active", b.dataset.key === activeKey);
+      b.classList.toggle("pending", pendingKey != null && b.dataset.key === pendingKey);
+    }
   }
 
   _update() {
@@ -245,8 +253,17 @@ class ObserverThermostatCard extends HTMLElement {
     e.target.textContent = off ? "Off" : (target != null ? `${target}°` : "—");
     e.minus.disabled = e.plus.disabled = off || target == null;
 
+    // Mode/fan clicks stay "pending" until the thermostat reports the new value
+    const now = Date.now();
+    if (this._pendingMode && (this._pendingMode.key === mode || now - this._pendingMode.at > PENDING_TIMEOUT_MS)) this._pendingMode = null;
+    if (this._pendingFan && (this._pendingFan.key === a.fan_mode || now - this._pendingFan.at > PENDING_TIMEOUT_MS)) this._pendingFan = null;
+    if ((this._pendingMode || this._pendingFan) && !this._pendingTimer) {
+      // re-check periodically so a timeout clears even if no state update arrives
+      this._pendingTimer = setInterval(() => { this._update(); if (!this._pendingMode && !this._pendingFan) { clearInterval(this._pendingTimer); this._pendingTimer = null; } }, 2000);
+    }
+
     // Waiting for the thermostat to pick up a change (it polls the server)
-    e.pending.classList.toggle("show", this._val(this._config.pending_entity) === "on" || this._pendingTarget != null);
+    e.pending.classList.toggle("show", this._val(this._config.pending_entity) === "on" || this._pendingTarget != null || !!this._pendingMode || !!this._pendingFan);
 
     // Status line
     const parts = [];
@@ -270,11 +287,11 @@ class ObserverThermostatCard extends HTMLElement {
     const modes = [...(a.hvac_modes || [])];
     if (this._hasEheat(st) && !modes.includes("eheat")) modes.push("eheat");
     const modeItems = MODE_ORDER.filter((m) => modes.includes(m)).map((m) => ({ key: m, ...MODE_DEFS[m] }));
-    this._renderButtons(e.modes, modeItems, mode, (m) => this._setMode(m, this._state(this._config.entity)), "_modeKey");
+    this._renderButtons(e.modes, modeItems, mode, (m) => this._setMode(m, this._state(this._config.entity)), "_modeKey", this._pendingMode?.key);
 
     // Fan buttons
     const fanItems = (a.fan_modes || []).map((f) => ({ key: f, label: FAN_LABELS[f] || f, cls: "fan" }));
-    this._renderButtons(e.fans, fanItems, a.fan_mode, (f) => this._call("set_fan_mode", { fan_mode: f }), "_fanKey");
+    this._renderButtons(e.fans, fanItems, a.fan_mode, (f) => { this._pendingFan = { key: f, at: Date.now() }; this._update(); this._call("set_fan_mode", { fan_mode: f }); }, "_fanKey", this._pendingFan?.key);
 
     // Info row
     const hum = this._val(this._config.humidity_entity) ?? a.current_humidity;

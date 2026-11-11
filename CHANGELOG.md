@@ -4,6 +4,17 @@ This fork tracks [aneisch/thermostat_api_server_docker](https://github.com/aneis
 
 Base: upstream commit `b882915` ("Misc bug fixes, including unexpected flip to heat"), the latest upstream as of 2026-11-10.
 
+## 1.0.4 — 2026-11-10
+
+### Fixed
+- **Fan mode reverting to auto** (upstream bug). The outgoing config started as `fan: auto, hold: on` and was never refreshed from what the thermostat reported. Any change from HA (mode, setpoint, a setting) also pushed fan `auto`. It also reverted anything changed at the wall since the server started: mode, fan, setpoints. The outgoing config is now synced from every status report while no HA change is pending. A setpoint change from HA still sets hold `on`, as upstream intended.
+- The "no changes" reply, sent on every poll every few seconds, contained malformed XML (`<dealerConfigHasChanges>off</dealerHasChanges>`). The thermostat tolerated it; it's now well-formed.
+- The MQTT state is published as real JSON. The old `str(dict)` plus quote-replacement broke on apostrophes, and on any value containing the text `None`.
+- If the thermostat requests its config before its first status report, the server returns an empty reply instead of crashing.
+
+### Card 1.1.0
+- Mode and fan buttons show a pulsing dashed outline, and "Sending to thermostat…" appears until the thermostat reports the new value (or after 45 s).
+
 ## 1.0.3 — 2026-11-10
 
 ### Added

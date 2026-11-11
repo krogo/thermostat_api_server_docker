@@ -104,6 +104,10 @@ if device_settings:
 else:
     logging.info("No saved thermostat settings yet; using defaults until the thermostat reports its own")
 
+def state_json():
+    # Real JSON (the old str()/replace() approach broke on apostrophes and on any value containing "None")
+    return json.dumps({k: ("" if v is None else v) for k, v in current_configuration.items()})
+
 device = {"mdl": "TSTAT0201CW", "sw": "Unknown", "mf": "Observer", "ids": thermostat_serial, "name": thermostat_name}
 
 climate_configuration_payload = {
@@ -453,6 +457,8 @@ def on_message(client, userdata, message):
 
     elif message.topic == f"{thermostat_command_topic}/temperature":
         new_temperature = message.payload.split(".")[0]
+        # A setpoint set from HA should stick rather than be replaced by the schedule
+        candidate_configuration["hold"] = "on"
         
         # Determine active mode (fall back to current_configuration if not set in candidate)
         active_mode = candidate_configuration.get('mode', current_configuration.get('mode'))
@@ -487,7 +493,7 @@ def on_message(client, userdata, message):
 
     if changes_pending:
         current_configuration["changes_pending"] = "ON"
-        client.publish(thermostat_state_topic, str(current_configuration).replace("'", '"').replace("None", '""'), retain=True)
+        client.publish(thermostat_state_topic, state_json(), retain=True)
 
 class MyHttpRequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -500,7 +506,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
             logging.info(f"{self.address_string()} -- malformed request -- {format % args}")
 
     def send_no_changes(self):
-        html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>0</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>0</oduStatusPingRate><configHasChanges>off</configHasChanges><dealerConfigHasChanges>off</dealerHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
+        html = f'''<status version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/status"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><pingRate>0</pingRate><dealerConfigPingRate>0</dealerConfigPingRate><weatherPingRate>14400</weatherPingRate><equipEventsPingRate>60</equipEventsPingRate><historyPingRate>86400</historyPingRate><iduFaultsPingRate>86400</iduFaultsPingRate><iduStatusPingRate>86400</iduStatusPingRate><oduFaultsPingRate>86400</oduFaultsPingRate><oduStatusPingRate>0</oduStatusPingRate><configHasChanges>off</configHasChanges><dealerConfigHasChanges>off</dealerConfigHasChanges><dealerHasChanges>off</dealerHasChanges><oduConfigHasChanges>off</oduConfigHasChanges><iduConfigHasChanges>off</iduConfigHasChanges><utilityEventsHasChanges>off</utilityEventsHasChanges></status>'''
         self.send_response(200)
         self.send_header("Content-Length", str(len(html)))
         self.send_header("Connection", "keep-alive")
@@ -544,6 +550,14 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
             changes_pending = False
             current_configuration["changes_pending"] = "OFF"
             settings = effective_settings()
+            for key in ("mode", "fan", "hold", "htsp", "clsp"):
+                if key not in candidate_configuration and current_configuration.get(key):
+                    candidate_configuration[key] = current_configuration[key]
+            missing = [k for k in ("mode", "fan", "hold", "htsp", "clsp") if k not in candidate_configuration]
+            if missing:
+                logging.warning(f"Config requested before the thermostat reported {missing}; sending nothing")
+                self.send_empty_200()
+                return
             logging.info(f'''New configuration: {candidate_configuration} settings: {settings}''')
             html = f'''<config version="1.9" xmlns:atom="http://www.w3.org/2005/Atom"><atom:link rel="self" href="http://{api_server_address}/systems/{thermostat_serial}/config"/><atom:link rel="http://{api_server_address}/rels/system" href="http://{api_server_address}/systems/{thermostat_serial}"/><atom:link rel="http://{api_server_address}/rels/dealer_config" href="http://{api_server_address}/systems/{thermostat_serial}/dealer_config"/><timestamp>{datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}</timestamp><mode>{candidate_configuration["mode"]}</mode><fan>{candidate_configuration["fan"]}</fan><blight>{settings["blight"]}</blight><timeFormat>{settings["timeFormat"]}</timeFormat><dst>{settings["dst"]}</dst><volume>{settings["volume"]}</volume><soundType>{settings["soundType"]}</soundType><scrLockout>{settings["scrLockout"]}</scrLockout><scrLockoutCode>{settings["scrLockoutCode"]}</scrLockoutCode><humSetpoint>{settings["humSetpoint"]}</humSetpoint><dehumSetpoint>{settings["dehumSetpoint"]}</dehumSetpoint><utilityEvent/><zones><zone id="1"><name>Zone 1</name><hold>{candidate_configuration["hold"]}</hold><otmr/><htsp>{candidate_configuration["htsp"]}</htsp><clsp>{candidate_configuration["clsp"]}</clsp><program></program></zone></zones></config>'''
             self.send_response(200)
@@ -558,7 +572,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                 pending_settings.clear()
                 save_settings()
             current_configuration.update(effective_settings())
-            client.publish(thermostat_state_topic, str(current_configuration).replace("'", '"').replace("None", '""'), retain=True)
+            client.publish(thermostat_state_topic, state_json(), retain=True)
 
         else:
             # Send 0 length 200 response
@@ -603,7 +617,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                     mode_el = cfg.find("mode")
                     logging.debug(f"Thermostat config report: mode={mode_el.text if mode_el is not None else None} settings={reported}")
                     if learn_settings(reported):
-                        client.publish(thermostat_state_topic, str(current_configuration).replace("'",'"').replace("None",'""'), retain=True)
+                        client.publish(thermostat_state_topic, state_json(), retain=True)
                     self.send_empty_200()
                     return
                 if "/equipment_events" in final_locator:
@@ -658,6 +672,15 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                 logging.debug(f"Current Configuration: {current_configuration}")
                 current_configuration["last_communication"] = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
+                # Keep the outgoing config in step with what the thermostat reports, so a push
+                # triggered by one HA change doesn't revert anything else (fan, mode, setpoints,
+                # hold) to a stale value -- including changes made at the wall. Only skipped
+                # while HA changes are waiting to be picked up.
+                if not changes_pending:
+                    for key in ("mode", "fan", "hold", "htsp", "clsp"):
+                        if current_configuration.get(key):
+                            candidate_configuration[key] = current_configuration[key]
+
                 # Initialize candidate_configuration as current_configuration at first start.
                 # Use setdefault, not a blind overwrite: a command (e.g. a power on/off) can
                 # arrive after container start but before the device's first status check-in,
@@ -690,7 +713,7 @@ class MyHttpRequestHandler(BaseHTTPRequestHandler):
                     self.send_no_changes()
 
             # Update MQTT topic with current states
-            client.publish(thermostat_state_topic, str(current_configuration).replace("'",'"').replace("None",'""'), retain=True)
+            client.publish(thermostat_state_topic, state_json(), retain=True)
 
         # Malformed message
         else:

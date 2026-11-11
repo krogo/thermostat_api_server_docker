@@ -5,7 +5,7 @@ A Lovelace card for this server's climate entity. Emergency Heat is a fourth mod
 ## Install
 
 1. Copy `observer-thermostat-card.js` to `/config/www/` (it's `www` inside the `config` Samba share; create the folder if it doesn't exist).
-2. **Settings → Dashboards → ⋮ → Resources → Add resource**: URL `/local/observer-thermostat-card.js?v=1`, type **JavaScript module**. If the Resources menu isn't there, turn on Advanced mode in your user profile.
+2. **Settings → Dashboards → ⋮ → Resources → Add resource**: URL `/local/observer-thermostat-card.js?v=2`, type **JavaScript module**. If the Resources menu isn't there, turn on Advanced mode in your user profile.
 3. Reload the browser, then add a card. It appears in the card picker as "Observer Thermostat Card", or you can use YAML:
 
 ```yaml
