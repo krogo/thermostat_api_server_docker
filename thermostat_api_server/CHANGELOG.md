@@ -62,7 +62,7 @@ Installable from the Home Assistant app store: add this repository under **Setti
 
 ## 1.0.0 — 2026-11-10 (commits `ac36cab`, `65df724`, `9beb0be`)
 
-First version run as a Home Assistant OS local app, replacing the Docker container on the NAS.
+First version run as a Home Assistant OS local app, replacing a standalone Docker container.
 
 ### Added
 - **Emergency heat.** The climate entity has an `Emergency Heat` preset. Selecting it sets the thermostat mode to `eheat`; selecting `none` returns to `heat`. While in emergency heat the HVAC mode shows `heat`, the target temperature follows the heating setpoint, and power on/off restores emergency heat if that was the last mode. The mode string can be changed with `EMERGENCY_HEAT_MODE` (default `eheat`, confirmed on firmware CESR131611-6.10).

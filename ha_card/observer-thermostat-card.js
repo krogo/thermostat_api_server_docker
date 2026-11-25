@@ -5,16 +5,16 @@
  * plus equipment status, humidity, outdoor temperature and filter hours.
  *
  * type: custom:observer-thermostat-card
- * entity: climate.house_main
+ * entity: climate.thermostat
  * # optional overrides (defaults are derived from the climate entity id):
- * name: House
+ * name: Thermostat
  * eheat_preset: Emergency Heat
- * humidity_entity: sensor.house_main_humidity
- * outdoor_entity: sensor.house_main_outdoor_ambient_temperature
- * filter_entity: sensor.house_main_filter_hours_remain
- * fan_status_entity: sensor.house_main_fan_status
- * outdoor_unit_entity: sensor.house_main_outdoor_unit
- * pending_entity: binary_sensor.house_main_changes_pending
+ * humidity_entity: sensor.thermostat_humidity
+ * outdoor_entity: sensor.thermostat_outdoor_ambient_temperature
+ * filter_entity: sensor.thermostat_filter_hours_remain
+ * fan_status_entity: sensor.thermostat_fan_status
+ * outdoor_unit_entity: sensor.thermostat_outdoor_unit
+ * pending_entity: binary_sensor.thermostat_changes_pending
  */
 
 const CARD_VERSION = "1.1.0";
@@ -37,7 +37,7 @@ const SETPOINT_DEBOUNCE_MS = 1500;
 class ObserverThermostatCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity || !config.entity.startsWith("climate.")) {
-      throw new Error("Set 'entity' to your thermostat's climate entity, e.g. climate.house_main");
+      throw new Error("Set 'entity' to your thermostat's climate entity, e.g. climate.thermostat");
     }
     const base = config.entity.split(".")[1];
     this._config = {
@@ -64,7 +64,7 @@ class ObserverThermostatCard extends HTMLElement {
 
   static getStubConfig(hass) {
     const climate = Object.keys(hass.states).find((e) => e.startsWith("climate."));
-    return { entity: climate || "climate.house_main" };
+    return { entity: climate || "climate.thermostat" };
   }
 
   // ---------- helpers ----------
@@ -268,10 +268,10 @@ class ObserverThermostatCard extends HTMLElement {
     // Status line
     const parts = [];
     const action = a.hvac_action;
-    if (action === "heating") parts.push(["mdi:fire", mode === "eheat" ? "Heating — furnace (E-Heat)" : "Heating", mode === "eheat" ? "act-eheat" : "act-heating"]);
+    if (action === "heating") parts.push(["mdi:fire", mode === "eheat" ? "Heating (E-Heat)" : "Heating", mode === "eheat" ? "act-eheat" : "act-heating"]);
     else if (action === "cooling") parts.push(["mdi:snowflake", "Cooling", "act-cooling"]);
     else if (action) parts.push(["mdi:power-sleep", action === "off" ? "Off" : "Idle", ""]);
-    else if (mode === "eheat") parts.push(["mdi:fire-alert", "E-Heat (furnace only)", "act-eheat"]);
+    else if (mode === "eheat") parts.push(["mdi:fire-alert", "E-Heat", "act-eheat"]);
     const fan = this._val(this._config.fan_status_entity);
     if (fan === "on") parts.push(["mdi:fan", "Fan running", ""]);
     const odu = this._val(this._config.outdoor_unit_entity);

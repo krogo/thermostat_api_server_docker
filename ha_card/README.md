@@ -10,7 +10,7 @@ A Lovelace card for this server's climate entity. Emergency Heat is a fourth mod
 
 ```yaml
 type: custom:observer-thermostat-card
-entity: climate.house_main
+entity: climate.thermostat
 ```
 
 After updating the JS file, bump `?v=` in the resource URL (or hard-refresh) so browsers don't keep the cached copy.
@@ -35,6 +35,6 @@ After updating the JS file, bump `?v=` in the resource URL (or hard-refresh) so 
 
 - **+ / −** changes the setpoint locally. The change is sent 1.5 s after the last press, so tapping several times sends a single update.
 - **"Sending to thermostat…"** is shown until the thermostat picks up the change. The thermostat polls the server, so this usually takes a few seconds.
-- **E-Heat** sets the `Emergency Heat` preset. On this dual-fuel system that means furnace only, with the heat pump off. **Heat** while in E-Heat clears the preset.
+- **E-Heat** sets the `Emergency Heat` preset. What that runs depends on the equipment: furnace only on a dual-fuel system, backup (strip) heat only on a heat-pump system. **Heat** while in E-Heat clears the preset.
 - **Clicking the name** or an info value opens HA's standard dialog. That dialog still shows the Preset box, because a card can't change it.
 - **Humidity** is shown in the warning color at 60 % or above.
