@@ -22,7 +22,7 @@ ENV LOG_LEVEL DEBUG
 ENV EMERGENCY_HEAT_MODE eheat
 ENV SETTINGS_FILE /data/thermostat_settings.json
 
-COPY ./thermostat_api_server.py /usr/bin/thermostat_api_server.py
+COPY ./thermostat_api_server/thermostat_api_server.py /usr/bin/thermostat_api_server.py
 
 RUN apk add --no-cache --update curl && \
   chmod +x /usr/bin/thermostat_api_server.py && \

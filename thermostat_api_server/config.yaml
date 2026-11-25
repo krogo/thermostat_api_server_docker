@@ -1,0 +1,36 @@
+name: Observer Thermostat API Server
+version: "1.1.0"
+slug: thermostat_api_server
+description: Local API server for Observer communicating thermostats (TSTAT0201CW), bridged to MQTT
+url: https://github.com/krogo/thermostat_api_server_docker
+arch:
+  - amd64
+  - aarch64
+# Plain Python image, no S6 overlay: let Docker's init forward the stop signal
+init: true
+startup: services
+boot: auto
+services:
+  - mqtt:want
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: Thermostat API (the thermostat connects here)
+options:
+  thermostat_name: Thermostat
+  log_level: INFO
+  emergency_heat_mode: eheat
+  status_ping_rate: 0
+  odu_status_ping_rate: 0
+schema:
+  thermostat_name: str(1,)
+  thermostat_serial: str(1,)
+  api_server_address: str(1,)
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_username: str?
+  mqtt_password: password?
+  log_level: list(DEBUG|INFO|WARNING|ERROR)
+  emergency_heat_mode: str(1,)
+  status_ping_rate: int(0,)
+  odu_status_ping_rate: int(0,)

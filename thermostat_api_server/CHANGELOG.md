@@ -1,8 +1,23 @@
 # Changelog (krogo fork)
 
-This fork tracks [aneisch/thermostat_api_server_docker](https://github.com/aneisch/thermostat_api_server_docker) and adds the changes below. Version numbers match the `version` in the Home Assistant local app's `config.yaml` (see `ha_app/`).
+This fork tracks [aneisch/thermostat_api_server_docker](https://github.com/aneisch/thermostat_api_server_docker) and adds the changes below. Version numbers match the `version` in the Home Assistant app's `config.yaml` (this folder).
 
 Base: upstream commit `b882915` ("Misc bug fixes, including unexpected flip to heat"), the latest upstream as of 2026-11-10.
+
+## 1.1.0 — 2026-11-25
+
+Installable from the Home Assistant app store: add this repository under **Settings → Apps → Install app → ⋮ → Repositories**.
+
+### Changed
+- **Settings moved to the Configuration tab.** The app no longer uses `ENV` lines in its Dockerfile. Thermostat name, serial, server address, log level, emergency heat string and check-in intervals are app options.
+- **MQTT is found automatically** from the Mosquitto broker app. MQTT host/port/username/password are optional, for external brokers only.
+- The app image is built from `python:3.13-alpine` with paho-mqtt 2.x instead of upstream's `:latest` image. It now also builds on `aarch64` (Raspberry Pi, Green, Yellow).
+- `thermostat_api_server.py` moved into the app folder. The standalone Docker image (root `Dockerfile`) builds from there.
+
+### Migrating from the 1.0.x local app
+- The store app has a different slug from `local_thermostat_api_server`, so it installs as a new app. Stop and uninstall the local app first, so two servers don't publish the same discovery topics.
+- Use the same thermostat name to keep the same entity IDs.
+- Learned device settings start over; they are relearned from the thermostat's next config report.
 
 ## 1.0.6 — 2026-11-10
 

@@ -1,0 +1,48 @@
+configuration:
+  thermostat_name:
+    name: Thermostat name
+    description: >-
+      Device name in Home Assistant. It's also part of the MQTT topics and
+      entity IDs, so changing it later creates new entities.
+  thermostat_serial:
+    name: Thermostat serial number
+    description: The serial number shown in the thermostat's settings.
+  api_server_address:
+    name: Server address
+    description: >-
+      The LAN IP of your Home Assistant host, as the thermostat reaches it
+      (for example 192.168.1.20). Use the same address you enter on the thermostat.
+  mqtt_host:
+    name: MQTT host
+    description: >-
+      Leave empty to use the Mosquitto broker app automatically. Set it only
+      for an external broker.
+  mqtt_port:
+    name: MQTT port
+    description: Only used with MQTT host. Default 1883.
+  mqtt_username:
+    name: MQTT username
+    description: Only used with MQTT host.
+  mqtt_password:
+    name: MQTT password
+    description: Only used with MQTT host.
+  log_level:
+    name: Log level
+    description: >-
+      INFO for normal use. DEBUG logs every thermostat post, including the
+      screen lockout code, router MAC and pairing PIN.
+  emergency_heat_mode:
+    name: Emergency heat mode string
+    description: >-
+      The raw mode string your thermostat uses for emergency heat. eheat on
+      firmware CESR131611-6.10.
+  status_ping_rate:
+    name: Status check-in interval
+    description: >-
+      pingRate sent to the thermostat. 0 lets the thermostat use its default.
+  odu_status_ping_rate:
+    name: Outdoor unit check-in interval
+    description: >-
+      oduStatusPingRate sent to the thermostat. 0 lets the thermostat use its default.
+network:
+  8080/tcp: Thermostat API port. The thermostat connects to this port on the server address.

@@ -3,7 +3,15 @@
 
 Acts as API server for Observer Communicating HVAC controller (TSTAT0201CW). Bridges MQTT and thermostat for control through applications such as Home Assistant. You'll need to point your thermostat at this application by modifying the observer server address on the thermostat. Depending on your thermostat's firmware version, certain functionaly may or may not be supported. 
 
-## Usage
+## Home Assistant app
+
+This repository is a Home Assistant app repository. To install:
+
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fkrogo%2Fthermostat_api_server_docker)
+
+or add `https://github.com/krogo/thermostat_api_server_docker` under **Settings → Apps → Install app → ⋮ → Repositories**, then install **Observer Thermostat API Server**. Setup and options are on the app's Documentation tab ([DOCS.md](thermostat_api_server/DOCS.md)). MQTT is picked up from the Mosquitto broker app automatically.
+
+## Usage (standalone Docker)
 
 
 ### Example docker-compose
@@ -44,7 +52,7 @@ Uses [MQTT Discovery](https://www.home-assistant.io/docs/mqtt/discovery/) to add
 
 ### Emergency heat and device settings (krogo fork)
 
-See [CHANGELOG.md](CHANGELOG.md) for what this fork changes, and [ha_app/](ha_app/) for running it as a Home Assistant OS local app ([notes](ha_app/NOTES.md)).
+See [CHANGELOG.md](thermostat_api_server/CHANGELOG.md) for what this fork changes.
 
 
 - Emergency heat appears in Home Assistant as the **Emergency Heat** preset on the climate entity (HVAC mode shows *heat*). Selecting the preset sends the `EMERGENCY_HEAT_MODE` mode string to the thermostat; clearing it returns to normal heat. To confirm the right string for your firmware, put the thermostat in emergency heat at the wall and look at the *Operating Mode* sensor.
